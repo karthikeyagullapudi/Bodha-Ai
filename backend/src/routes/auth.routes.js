@@ -7,12 +7,15 @@ import {
   registerUser,
   loginUser,
   logoutUser,
+  verifyEmail,
 } from '../controller/auth.controller.js';
+import { identifyUser } from '../middleware/auth.middleware.js';
 
-const router = Router();
+const authRouter = Router();
 
-router.post('/register', registerValidator, registerUser);
-router.post('/login', loginValidator, loginUser);
-router.post('/logout', logoutUser);
+authRouter.post('/register', registerValidator, registerUser);
+authRouter.post('/login', loginValidator, loginUser);
+authRouter.post('/logout', identifyUser, logoutUser);
+authRouter.get('/verify-email', verifyEmail);
 
-export default router;
+export default authRouter;
