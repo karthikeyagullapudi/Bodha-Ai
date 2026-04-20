@@ -8,6 +8,7 @@ import {
   loginUser,
   logoutUser,
   verifyEmail,
+  getMe,
 } from '../controller/auth.controller.js';
 import { identifyUser } from '../middleware/auth.middleware.js';
 
@@ -17,5 +18,6 @@ authRouter.post('/register', registerValidator, registerUser);
 authRouter.post('/login', loginValidator, loginUser);
 authRouter.post('/logout', identifyUser, logoutUser);
 authRouter.get('/verify-email', verifyEmail);
+authRouter.get('/get-me', identifyUser, getMe);
 
 export default authRouter;

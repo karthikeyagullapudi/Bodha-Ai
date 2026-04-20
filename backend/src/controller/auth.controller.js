@@ -108,50 +108,74 @@ const registerUser = async (req, res) => {
 };
 
 const loginUser = async (req, res) => {
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-  const user = await userModel.findOne({ email });
+    const user = await userModel.findOne({ email });
 
-  if (!user) {
-    return res.status(400).json({
-      message: 'Try after registering',
+    if (!user) {
+      return res.status(400).json({
+        message: 'Try after registering',
+        success: false,
+        error: 'Invalid credentials',
+      });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      return res.status(400).json({
+        message: 'password is incorrect',
+        success: false,
+        error: 'Invalid credentials',
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        id: user._id.toString(),
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' },
+    );
+
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
+    res.status(200).json({
+      message: 'User logged in successfully',
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message || 'Internal Server Error',
       success: false,
-      error: 'Invalid credentials',
+      error: error.message,
     });
   }
-
-  const isPasswordValid = await bcrypt.compare(password, user.password);
-
-  if (!isPasswordValid) {
-    return res.status(400).json({
-      message: 'password is incorrect',
-      success: false,
-      error: 'Invalid credentials',
-    });
-  }
-
-  const token = jwt.sign(
-    {
-      id: user._id,
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: '1h' },
-  );
-
-  res.cookie('token', token, {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'strict',
-    maxAge: 24 * 60 * 60 * 1000,
-  });
-
-  res.status(200).json({
-    message: 'User logged in successfully',
-    success: true,
-    data: user,
-  });
 };
 
 const logoutUser = (req, res) => {};
 
-export { registerUser, loginUser, logoutUser, verifyEmail };
+const getMe = (req, res) => {
+  try {
+    const user = req.user;
+    res.status(200).json({
+      message: 'User fetched successfully',
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Internal Server Error',
+    });
+  }
+};
+
+export { registerUser, loginUser, logoutUser, verifyEmail, getMe };
