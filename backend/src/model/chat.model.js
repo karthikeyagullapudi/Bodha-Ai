@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import userModel from './auth.model';
+import userModel from './auth.model.js';
 
 const chatSchema = new mongoose.Schema(
   {

@@ -13,7 +13,10 @@ export const useAuth = () => {
       dispatch(setLoading(false));
       return response;
     } catch (error) {
-      const errorMessage = error.response?.data?.errors?.[0]?.msg || error.response?.data?.message || error.message;
+      const errorMessage =
+        error.response?.data?.errors?.[0]?.msg ||
+        error.response?.data?.message ||
+        error.message;
       dispatch(setError(errorMessage));
       dispatch(setLoading(false));
       throw error;
@@ -28,7 +31,10 @@ export const useAuth = () => {
       dispatch(setLoading(false));
       return response;
     } catch (error) {
-      const errorMessage = error.response?.data?.errors?.[0]?.msg || error.response?.data?.message || error.message;
+      const errorMessage =
+        error.response?.data?.errors?.[0]?.msg ||
+        error.response?.data?.message ||
+        error.message;
       dispatch(setError(errorMessage));
       dispatch(setLoading(false));
       throw error;
@@ -43,7 +49,10 @@ export const useAuth = () => {
       dispatch(setLoading(false));
       return response;
     } catch (error) {
-      const errorMessage = error.response?.data?.errors?.[0]?.msg || error.response?.data?.message || error.message;
+      const errorMessage =
+        error.response?.data?.errors?.[0]?.msg ||
+        error.response?.data?.message ||
+        error.message;
       dispatch(setError(errorMessage));
       dispatch(setLoading(false));
       throw error;

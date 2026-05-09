@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:3000/api',
+  baseURL: 'http://localhost:3000/api/auth',
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -9,16 +9,16 @@ const api = axios.create({
 });
 
 export const Register = async (userData) => {
-  const response = await api.post('/auth/register', userData);
+  const response = await api.post('/register', userData);
   return response.data;
 };
 
 export const Login = async (userData) => {
-  const response = await api.post('/auth/login', userData);
+  const response = await api.post('/login', userData);
   return response.data;
 };
 
 export const getMe = async () => {
-  const response = await api.get('/auth/get-me');
+  const response = await api.get('/get-me');
   return response.data;
 };
