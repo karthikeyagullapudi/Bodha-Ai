@@ -68,7 +68,7 @@ export const getAllChats = async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: 'Chats recived successfully',
+    message: 'Chats received successfully',
     chats: chats,
   });
 };
@@ -97,7 +97,7 @@ export const getMessages = async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: 'Messages recived successfully',
+    message: 'Messages received successfully',
     messages: messages,
   });
 };

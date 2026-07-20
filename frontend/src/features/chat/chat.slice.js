@@ -23,7 +23,6 @@ export const chatSlice = createSlice({
     addNewMessage: (state, action) => {
       const { chatId, content, role } = action.payload;
       state.chats[chatId].messages.push({ content, role });
-      // state.chats[chatId].lastUpdatedAt = new Date().toISOString();
     },
     addMessages: (state, action) => {
       const { chatId, messages } = action.payload;
@@ -72,22 +71,3 @@ export const {
   updateChatTitle,
 } = chatSlice.actions;
 export default chatSlice.reducer;
-
-
-// chats = {
-//     'know more about india':{
-//         messages:[
-//             {
-//                 content:'what is its caputal',
-//             role:'user'
-//         },
-//         {
-//             constent:'Delhi',
-//             role:'ai'
-//         }
-//         ],
-//         id:'skjdhfkjsahdfkas',
-//         lastUpdatedAt:"29-2-12"
-
-//     }
-// }
