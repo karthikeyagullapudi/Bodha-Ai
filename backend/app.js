@@ -1,6 +1,8 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+
 import authRoutes from './src/routes/auth.routes.js';
 import chatRouter from './src/routes/chat.routes.js';
 import morgan from 'morgan';

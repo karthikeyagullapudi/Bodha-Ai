@@ -1,6 +1,14 @@
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
-import { HumanMessage, SystemMessage, AIMessage } from 'langchain';
+import {
+  HumanMessage,
+  SystemMessage,
+  AIMessage,
+} from '@langchain/core/messages';
 import { ChatMistralAI } from '@langchain/mistralai';
+import { tool } from '@langchain/core/tools';
+import { createAgent } from 'langchain';
+import { z } from 'zod';
+import { searchInternet } from './internet.service.js';
 
 const geminiModel = new ChatGoogleGenerativeAI({
   model: 'gemini-2.5-flash',
@@ -12,17 +20,34 @@ const mistralModel = new ChatMistralAI({
   apiKey: process.env.MISTRAL_API_KEY,
 });
 
+const searchInternetTool = tool(searchInternet, {
+  name: 'searchInternet',
+  description:
+    'Search the live internet for real-time information, current news, weather, stock market updates, recent events, or topics beyond model knowledge cutoff.',
+  schema: z.object({
+    query: z.string().describe('The search query to look up on the internet'),
+  }),
+});
+
+const agent = createAgent({
+  model: geminiModel,
+  tools: [searchInternetTool],
+  prompt:
+    'You are Bodha AI, an advanced, highly intelligent AI assistant equipped with real-time web search capabilities. ALWAYS use the searchInternet tool whenever asked about current events, recent developments, real-time facts, stock prices, weather, or up-to-date topics. Provide comprehensive, accurate, structured, and beautifully formatted markdown responses.',
+});
+
 export const generateResponse = async (messages) => {
-  const response = await geminiModel.invoke(
-    messages.map((message) => {
-      if (message.role === 'user') {
-        return new HumanMessage(message.content);
-      } else if (message.role === 'ai') {
-        return new AIMessage(message.content);
-      }
-    }),
+  const formattedMessages = messages.map((msg) =>
+    msg.role === 'user'
+      ? new HumanMessage(msg.content)
+      : new AIMessage(msg.content),
   );
-  return response.text;
+
+  const response = await agent.invoke({
+    messages: formattedMessages,
+  });
+
+  return response.messages[response.messages.length - 1].content;
 };
 
 export const generateTitle = async (message) => {

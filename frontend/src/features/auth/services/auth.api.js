@@ -22,3 +22,9 @@ export const getMe = async () => {
   const response = await api.get('/get-me');
   return response.data;
 };
+
+export const Logout = async () => {
+  const response = await api.post('/logout');
+  return response.data;
+};
+

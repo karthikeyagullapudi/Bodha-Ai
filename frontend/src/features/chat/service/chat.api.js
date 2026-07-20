@@ -14,6 +14,7 @@ export const sendMessage = async (messageData) => {
     message,
     chat: chatId || null,
   });
+
   return response.data;
 };
 
@@ -36,3 +37,9 @@ export const getMessages = async (chatId) => {
   const response = await httpClint.get(`/chat/${chatId}`);
   return response.data;
 };
+
+export const renameChat = async (chatId, title) => {
+  const response = await httpClint.put(`/rename-chat/${chatId}`, { title });
+  return response.data;
+};
+

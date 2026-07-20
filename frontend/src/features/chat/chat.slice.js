@@ -44,6 +44,19 @@ export const chatSlice = createSlice({
     setChatsIsLoading: (state, action) => {
       state.isLoading = action.payload;
     },
+    removeChat: (state, action) => {
+      const chatId = action.payload;
+      delete state.chats[chatId];
+      if (state.currentChatId === chatId) {
+        state.currentChatId = null;
+      }
+    },
+    updateChatTitle: (state, action) => {
+      const { chatId, title } = action.payload;
+      if (state.chats[chatId]) {
+        state.chats[chatId].title = title;
+      }
+    },
   },
 });
 
@@ -55,8 +68,11 @@ export const {
   createNewChat,
   addNewMessage,
   addMessages,
+  removeChat,
+  updateChatTitle,
 } = chatSlice.actions;
 export default chatSlice.reducer;
+
 
 // chats = {
 //     'know more about india':{

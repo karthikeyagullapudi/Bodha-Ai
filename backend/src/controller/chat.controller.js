@@ -1,4 +1,3 @@
-import { response } from 'express';
 import { generateResponse, generateTitle } from '../services/ai.service.js';
 import chatModel from '../model/chat.model.js';
 import messageModel from '../model/message.model.js';
@@ -123,3 +122,43 @@ export const deleteChat = async (req, res) => {
     message: 'Chat deleted successfully',
   });
 };
+
+export const renameChat = async (req, res) => {
+  const chatId = req.params.chatId;
+  const { title } = req.body;
+
+  if (!title || !title.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Title is required',
+    });
+  }
+
+  const chat = await chatModel.findById(chatId);
+
+  if (!chat) {
+    return res.status(404).json({
+      success: false,
+      message: 'Chat not found',
+    });
+  }
+
+  const user = req.user;
+
+  if (chat.user.toString() !== user._id.toString()) {
+    return res.status(403).json({
+      success: false,
+      message: 'Unauthorized to update this chat',
+    });
+  }
+
+  chat.title = title.trim();
+  await chat.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'Chat title updated successfully',
+    chat,
+  });
+};
+
