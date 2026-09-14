@@ -5,10 +5,11 @@ import http from 'http';
 import { initSocketServer } from './src/sockets/server.socket.js';
 
 const httpServer = http.createServer(app);
+const PORT = process.env.PORT || 3000;
 
 connectDb().then(() => {
-  httpServer.listen(process.env.PORT, () => {
-    console.log(`Server is running on port ${process.env.PORT}`);
+  httpServer.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
   });
 
   initSocketServer(httpServer);

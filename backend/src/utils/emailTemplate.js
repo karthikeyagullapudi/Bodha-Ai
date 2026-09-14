@@ -102,7 +102,7 @@ export const welcomeEmailTemplate = (username, verificationToken) => {
           Welcome to Bodha AI! We're absolutely thrilled to have you join our community. Your account has successfully been created. Please verify your email address to get started.
         </p>
         <div class="cta-container">
-          <a href="http://localhost:3000/api/auth/verify-email?token=${verificationToken}" class="cta-button">Verify Email</a>
+          <a href="${process.env.APP_URL || 'http://localhost:5173'}/api/auth/verify-email?token=${verificationToken}" class="cta-button">Verify Email</a>
         </div>
         <p class="message">
           If you have any questions, need help getting started, or just want to say hi, feel free to reply to this email. Our support team is always here for you.
@@ -195,7 +195,7 @@ export const emailVerifiedTemplate = () => {
         <div class="icon">✓</div>
         <h1>Email Verified!</h1>
         <p>Thank you for verifying your email. Your Bodha AI account is now active and ready to use.</p>
-        <a href="" class="btn">Go to Login</a>
+        <a href="/login" class="btn">Go to Login</a>
       </div>
     </body>
     </html>

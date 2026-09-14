@@ -1,7 +1,8 @@
 import { io } from 'socket.io-client';
 
 export const initChatSocket = () => {
-  const socket = io('http://localhost:3000', {
+  // No URL: connects to the same site the page was loaded from
+  const socket = io({
     withCredentials: true,
   });
 

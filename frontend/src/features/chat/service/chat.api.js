@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const httpClint = axios.create({
-  baseURL: 'http://localhost:3000/api/chats',
+  baseURL: '/api/chats',
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
