@@ -78,7 +78,7 @@ const PromptSuggestions = ({ onSelectPrompt, userName }) => {
       {/* Brand Badge */}
       <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-300 text-xs font-semibold tracking-wider uppercase mb-6 backdrop-blur-md">
         <span className="w-2 h-2 rounded-full bg-violet-400 animate-ping"></span>
-        Powered by Gemini 2.5 Flash & Tavily Search
+        Powered by Gemini 3.6 Flash & Tavily Search
       </div>
 
       {/* Hero Headline */}

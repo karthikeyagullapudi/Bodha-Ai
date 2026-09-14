@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import useChat from '../hooks/useChat';
 import { useAuth } from '../../auth/hook/useAuth';
-import { setCurrentChatId } from '../chat.slice';
+import { setCurrentChatId, setChatsError } from '../chat.slice';
 import CodeBlock from '../components/CodeBlock';
 import PromptSuggestions from '../components/PromptSuggestions';
 
@@ -22,7 +22,9 @@ const Dashboard = () => {
 
   const messagesEndRef = useRef(null);
   const { user } = useSelector((state) => state.auth);
-  const { chats, currentChatId, isLoading } = useSelector((state) => state.chat);
+  const { chats, currentChatId, isLoading, error } = useSelector(
+    (state) => state.chat,
+  );
 
   useEffect(() => {
     chat.handleGetChats();
@@ -49,11 +51,16 @@ const Dashboard = () => {
     setSidebarOpen(false);
   };
 
-  const handleSend = (textToSend) => {
+  const handleSend = async (textToSend) => {
     const query = textToSend || message;
     if (query.trim() && !isLoading) {
-      chat.handleSendMessage({ message: query, chatId: currentChatId });
       setMessage('');
+      const sent = await chat.handleSendMessage({
+        message: query,
+        chatId: currentChatId,
+      });
+      // Put the text back so the user can retry without retyping
+      if (!sent) setMessage(query);
     }
   };
 
@@ -304,7 +311,7 @@ const Dashboard = () => {
               <div className="px-3 py-2 text-[11px] text-violet-400 font-medium flex items-center justify-between">
                 <span>Model Engine</span>
                 <span className="px-2 py-0.5 rounded-full bg-violet-500/10 border border-violet-500/30 text-[10px]">
-                  Gemini 2.5
+                  Gemini 3.6
                 </span>
               </div>
               <button
@@ -574,6 +581,18 @@ const Dashboard = () => {
 
         {/* Input Bar Area */}
         <div className="p-4 md:p-6 pt-2 z-20">
+          {error && (
+            <div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+              <span>Couldn't get a response: {error}</span>
+              <button
+                onClick={() => dispatch(setChatsError(null))}
+                className="shrink-0 text-red-300/70 hover:text-red-200"
+                aria-label="Dismiss error"
+              >
+                ✕
+              </button>
+            </div>
+          )}
           <div className="relative flex items-end gap-2 bg-zinc-900/80 backdrop-blur-2xl border border-white/15 rounded-[2rem] p-2.5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] transition-all focus-within:border-violet-500/60 focus-within:shadow-[0_0_25px_-3px_rgba(139,92,246,0.3)]">
             <textarea
               value={message}
@@ -633,7 +652,7 @@ const Dashboard = () => {
           </div>
           <div className="text-center mt-2.5">
             <p className="text-[11px] text-zinc-500 font-medium tracking-wide">
-              Bodha AI integrates Gemini 2.5 Flash & Tavily Web Search. Verify important factual responses.
+              Bodha AI integrates Gemini 3.6 Flash & Tavily Web Search. Verify important factual responses.
             </p>
           </div>
         </div>

@@ -25,6 +25,7 @@ const useChat = () => {
 
   const handleSendMessage = async (messageData) => {
     try {
+      dispatch(setChatsError(null));
       dispatch(setChatsIsLoading(true));
       const data = await sendMessage(messageData);
       const targetChatId = messageData.chatId || data.chat?._id;
@@ -55,8 +56,11 @@ const useChat = () => {
           role: aiMessage.role,
         }),
       );
+      return true;
     } catch (error) {
-      dispatch(setChatsError(error.message));
+      // Prefer the server's message (e.g. AI provider failure) over axios's generic one
+      dispatch(setChatsError(error.response?.data?.message || error.message));
+      return false;
     } finally {
       dispatch(setChatsIsLoading(false));
     }

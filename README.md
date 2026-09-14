@@ -7,7 +7,7 @@ Bodha AI allows users to chat with an AI assistant that can browse the web live 
 ## Features
 
 - **Live Web Search:** Uses Tavily search via LangChain tools to fetch up-to-date information for queries beyond model knowledge cutoffs (e.g. current sports results, news, weather).
-- **Multi-Model Fallback System:** Uses Gemini 2.0 Flash as the primary model and falls back to Mistral Small if rate limits (HTTP 429) or quota errors occur.
+- **Multi-Model Fallback System:** Uses Gemini 3.6 Flash as the primary model and falls back to Mistral Small if rate limits (HTTP 429) or quota errors occur.
 - **Auto Chat Titling:** Generates short 2–4 word titles for new chat sessions using AI.
 - **Rich Markdown & Code Blocks:** Renders tables, lists, and code blocks with syntax highlighting and a one-click copy button.
 - **Full Chat History:** Create, rename, delete, and switch between past chat threads.
@@ -105,7 +105,7 @@ The AI service (`backend/src/services/ai.service.js`) uses LangChain `createAgen
 
 1. **System Prompt & Date Injection:** Each turn injects today's date into the system message so the LLM understands current context.
 2. **Tool Invocation:** When asked about sports results, news, or recent facts, the agent automatically executes Tavily web search to retrieve context before answering.
-3. **Fallback Logic:** If the primary model (`gemini-2.0-flash`) returns a rate-limit error, the service automatically falls back to `mistral-small-latest` so responses never fail.
+3. **Fallback Logic:** If the primary model (`gemini-3.6-flash`, override with `GEMINI_MODEL`) returns a rate-limit error, the service automatically falls back to `mistral-small-latest` so responses never fail.
 
 ## License
 

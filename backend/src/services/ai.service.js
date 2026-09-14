@@ -13,14 +13,18 @@ import { searchInternet } from './internet.service.js';
 const systemPromptText =
   'You are Bodha AI, an advanced, highly intelligent AI assistant equipped with real-time web search capabilities. ALWAYS use the searchInternet tool whenever asked about current events, recent developments, real-time facts, stock prices, weather, sports results, or up-to-date topics. Provide comprehensive, accurate, structured, and beautifully formatted markdown responses.';
 
+// Keep retries low so a failing provider falls through quickly instead of
+// leaving the user waiting for minutes while LangChain backs off
 const primaryModel = new ChatGoogleGenerativeAI({
-  model: 'gemini-2.0-flash',
+  model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
   apiKey: process.env.GEMINI_API_KEY,
+  maxRetries: 1,
 });
 
 const mistralModel = new ChatMistralAI({
   model: 'mistral-small-latest',
   apiKey: process.env.MISTRAL_API_KEY,
+  maxRetries: 1,
 });
 
 const searchInternetTool = tool(searchInternet, {
@@ -86,7 +90,7 @@ export const generateResponse = async (messages) => {
 
 export const generateTitle = async (message) => {
   try {
-    const response = await mistralModel.invoke([
+    const response = await primaryModel.invoke([
       new SystemMessage(
         `you are a helpful assistant that generates, concise and descriptive titles for the chat conversations.
 
