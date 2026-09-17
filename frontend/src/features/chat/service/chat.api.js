@@ -9,10 +9,11 @@ const httpClint = axios.create({
 });
 
 export const sendMessage = async (messageData) => {
-  const { message, chatId } = messageData;
+  const { message, chatId, requestId } = messageData;
   const response = await httpClint.post('/message', {
     message,
     chat: chatId || null,
+    requestId,
   });
 
   return response.data;

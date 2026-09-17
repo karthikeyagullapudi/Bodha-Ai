@@ -73,7 +73,19 @@ const agents = [
 
 const titleModels = TITLE_MODELS.map(createGeminiModel);
 
-export const generateResponse = async (messages) => {
+// The search tool receives its arguments as a JSON string
+const readSearchQuery = (input) => {
+  try {
+    return JSON.parse(input).query;
+  } catch {
+    return input;
+  }
+};
+
+// onProgress(stage, details) is told what the AI is doing, so the user can
+// see it: 'thinking', 'retrying' (a model failed, trying the next one),
+// 'searching' (with the search query) and 'writing'
+export const generateResponse = async (messages, onProgress = () => {}) => {
   const currentDate = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -96,14 +108,25 @@ export const generateResponse = async (messages) => {
 
   const deadline = Date.now() + RESPONSE_DEADLINE_MS;
 
-  for (const { name, agent } of agents) {
+  for (const [index, { name, agent }] of agents.entries()) {
     const timeLeft = deadline - Date.now();
     if (timeLeft < 5_000) break;
+
+    onProgress(index === 0 ? 'thinking' : 'retrying');
 
     try {
       const response = await agent.invoke(
         { messages: formattedMessages },
-        { signal: AbortSignal.timeout(Math.min(MODEL_TIMEOUT_MS, timeLeft)) },
+        {
+          signal: AbortSignal.timeout(Math.min(MODEL_TIMEOUT_MS, timeLeft)),
+          callbacks: [
+            {
+              handleToolStart: (tool, input) =>
+                onProgress('searching', { query: readSearchQuery(input) }),
+              handleToolEnd: () => onProgress('writing'),
+            },
+          ],
+        },
       );
       const text = response.messages.at(-1)?.text?.trim();
       if (text) return text;

@@ -1,4 +1,3 @@
-import { initChatSocket } from '../service/chat.socket.js';
 import {
   getAllChats,
   sendMessage,
@@ -142,7 +141,6 @@ const useChat = () => {
   };
 
   return {
-    initChatSocket,
     handleSendMessage,
     handleGetChats,
     handleOpenChat,

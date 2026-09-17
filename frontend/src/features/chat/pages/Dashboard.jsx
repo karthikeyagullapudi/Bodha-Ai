@@ -3,6 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import useChat from '../hooks/useChat';
+import useChatSocket from '../hooks/useChatSocket';
 import { useAuth } from '../../auth/hook/useAuth';
 import { setCurrentChatId, setChatsError } from '../chat.slice';
 import CodeBlock from '../components/CodeBlock';
@@ -11,8 +12,49 @@ import PromptSuggestions from '../components/PromptSuggestions';
 // Shared so an empty chat doesn't produce a new array (and a scroll) every render
 const NO_MESSAGES = [];
 
+// Header badge for each state of the live (Socket.IO) connection
+const CONNECTION_BADGES = {
+  live: {
+    label: 'Live & Connected',
+    style: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
+    dot: 'bg-emerald-400 animate-pulse',
+  },
+  connecting: {
+    label: 'Connecting…',
+    style: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
+    dot: 'bg-amber-400 animate-pulse',
+  },
+  reconnecting: {
+    label: 'Reconnecting…',
+    style: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
+    dot: 'bg-amber-400 animate-pulse',
+  },
+  offline: {
+    label: 'Offline',
+    style: 'bg-red-500/10 border-red-500/30 text-red-400',
+    dot: 'bg-red-400',
+  },
+};
+
+// Typing-indicator text for the progress updates the server sends
+const describeProgress = (progress) => {
+  switch (progress?.stage) {
+    case 'searching':
+      return progress.query
+        ? `Searching the web for "${progress.query}"`
+        : 'Searching the web';
+    case 'writing':
+      return 'Writing the answer';
+    case 'retrying':
+      return 'That model is busy, trying another one';
+    default:
+      return 'Bodha AI is thinking';
+  }
+};
+
 const Dashboard = () => {
   const chat = useChat();
+  const { status: connectionStatus, progress } = useChatSocket();
   const { handleLogout } = useAuth();
   const dispatch = useDispatch();
 
@@ -24,6 +66,8 @@ const Dashboard = () => {
   const [copiedMsgIdx, setCopiedMsgIdx] = useState(null);
   // The question being answered, shown before the server replies
   const [pendingMessage, setPendingMessage] = useState(null);
+  // Matches live progress updates to the message this tab sent
+  const [requestId, setRequestId] = useState(null);
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -69,13 +113,17 @@ const Dashboard = () => {
   const handleSend = async (textToSend) => {
     const query = textToSend || message;
     if (query.trim() && !isLoading) {
+      const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
       setMessage('');
       setPendingMessage(query);
+      setRequestId(id);
       const sent = await chat.handleSendMessage({
         message: query,
         chatId: currentChatId,
+        requestId: id,
       });
       setPendingMessage(null);
+      setRequestId(null);
       // Put the text back so the user can retry without retyping
       if (!sent) setMessage(query);
     }
@@ -100,6 +148,9 @@ const Dashboard = () => {
       chat.handleDeleteChat(chatId);
     }
   };
+
+  const badge = CONNECTION_BADGES[connectionStatus];
+  const currentProgress = progress?.requestId === requestId ? progress : null;
 
   const copyMessageContent = (content, index) => {
     navigator.clipboard.writeText(content);
@@ -424,9 +475,12 @@ const Dashboard = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              Live & Connected
+            <span
+              className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium ${badge.style}`}
+              title="Live connection to the Bodha AI server"
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`}></span>
+              {badge.label}
             </span>
           </div>
         </div>
@@ -592,7 +646,7 @@ const Dashboard = () => {
                   AI
                 </div>
                 <div className="bg-zinc-900/80 border border-white/10 rounded-2xl px-5 py-4 backdrop-blur-md flex items-center gap-3 text-zinc-400 text-sm font-medium">
-                  <span>Bodha AI is generating response</span>
+                  <span>{describeProgress(currentProgress)}</span>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-violet-400 animate-bounce"></span>
                     <span

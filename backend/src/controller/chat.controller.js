@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { generateResponse, generateTitle } from '../services/ai.service.js';
 import chatModel from '../model/chat.model.js';
 import messageModel from '../model/message.model.js';
+import { emitToUser } from '../sockets/server.socket.js';
 
 // Loads a chat and checks it belongs to the user. Sends the error response
 // itself and returns null when the chat can't be used.
@@ -60,10 +61,25 @@ export const sendMessage = async (req, res) => {
       history = await messageModel.find({ chat: chat._id }).sort({ _id: 1 });
     }
 
+    // Live progress goes to the user's open tabs over Socket.IO. The client
+    // sends a requestId so each tab only shows progress for its own request.
+    const requestId =
+      typeof req.body.requestId === 'string'
+        ? req.body.requestId.slice(0, 100)
+        : null;
+    const reportProgress = (stage, details = {}) => {
+      if (requestId) {
+        emitToUser(req.user._id, 'chat:progress', { requestId, stage, ...details });
+      }
+    };
+
     // Get the AI reply before saving anything, so a failed request doesn't
     // leave an empty chat or an unanswered message behind
     const [content, title] = await Promise.all([
-      generateResponse([...history, { role: 'user', content: message }]),
+      generateResponse(
+        [...history, { role: 'user', content: message }],
+        reportProgress,
+      ),
       chat ? chat.title : generateTitle(message),
     ]);
 

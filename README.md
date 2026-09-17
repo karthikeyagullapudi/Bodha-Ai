@@ -12,7 +12,7 @@ Bodha AI allows users to chat with an AI assistant that can browse the web live 
 - **Rich Markdown & Code Blocks:** Renders tables, lists, and code blocks with syntax highlighting and a one-click copy button.
 - **Full Chat History:** Create, rename, delete, and switch between past chat threads.
 - **Authentication:** Signup with email verification (sent through the Gmail API), login with JWTs in HTTP-only cookies, bcrypt password hashing, and rate limiting on auth and chat endpoints.
-- **Socket.IO Integration:** Backend server prepared with WebSockets for real-time state sync.
+- **Live Updates (Socket.IO):** An authenticated real-time connection shows its status in the header and streams what the AI is doing ("Searching the web for …") while a reply is generated.
 
 ## Tech Stack
 
