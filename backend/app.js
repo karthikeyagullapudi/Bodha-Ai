@@ -11,9 +11,11 @@ import morgan from 'morgan';
 
 const app = express();
 
-// Render sits in front of the app as a proxy; trust it so req.ip and
-// req.protocol reflect the real visitor (used by rate limiting and email links)
-app.set('trust proxy', 1);
+// Render forwards requests through one or more proxies on its private network.
+// Trusting private addresses lets req.ip and req.protocol reflect the real
+// visitor (used by rate limiting and email links); a client can't fake this,
+// since its own address is public.
+app.set('trust proxy', 'loopback, uniquelocal');
 
 app.use(
   cors({
