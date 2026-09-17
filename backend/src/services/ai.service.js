@@ -26,6 +26,12 @@ const GEMINI_MODELS = (
 // Titles use small, fast models so they don't eat into the answer models' quota
 const TITLE_MODELS = ['gemini-3.1-flash-lite', 'gemini-flash-lite-latest'];
 
+// Overloaded models can take minutes to answer or fail, so each attempt and
+// the whole reply get a time limit
+const MODEL_TIMEOUT_MS = 25_000;
+const RESPONSE_DEADLINE_MS = 70_000;
+const TITLE_TIMEOUT_MS = 8_000;
+
 const searchInternetTool = tool(searchInternet, {
   name: 'searchInternet',
   description:
@@ -88,9 +94,17 @@ export const generateResponse = async (messages) => {
     ),
   ];
 
+  const deadline = Date.now() + RESPONSE_DEADLINE_MS;
+
   for (const { name, agent } of agents) {
+    const timeLeft = deadline - Date.now();
+    if (timeLeft < 5_000) break;
+
     try {
-      const response = await agent.invoke({ messages: formattedMessages });
+      const response = await agent.invoke(
+        { messages: formattedMessages },
+        { signal: AbortSignal.timeout(Math.min(MODEL_TIMEOUT_MS, timeLeft)) },
+      );
       const text = response.messages.at(-1)?.text?.trim();
       if (text) return text;
       console.warn(`AI model ${name} returned an empty reply, trying the next model`);
@@ -121,19 +135,24 @@ const cleanTitle = (text) =>
     .replace(/[.:;,!]+$/, '')
     .slice(0, 60);
 
+const titlePrompt = new SystemMessage(
+  `you are a helpful assistant that generates, concise and descriptive titles for the chat conversations.
+
+  User will provide you with the first message of a chat conversation, and you will generate a title that captures the essence of the conversation in 2 to 4 words that title should be clear, relevant and engaging giving user a quick understanding of the chat topic. Reply with the title only, without quotes or formatting.`,
+);
+
 export const generateTitle = async (message) => {
   for (const titleModel of titleModels) {
     try {
-      const response = await titleModel.invoke([
-        new SystemMessage(
-          `you are a helpful assistant that generates, concise and descriptive titles for the chat conversations.
-
-          User will provide you with the first message of a chat conversation, and you will generate a title that captures the essence of the conversation in 2 to 4 words that title should be clear, relevant and engaging giving user a quick understanding of the chat topic. Reply with the title only, without quotes or formatting.`,
-        ),
-        new HumanMessage(
-          `This is the first message of a chat conversation: ${message}`,
-        ),
-      ]);
+      const response = await titleModel.invoke(
+        [
+          titlePrompt,
+          new HumanMessage(
+            `This is the first message of a chat conversation: ${message}`,
+          ),
+        ],
+        { signal: AbortSignal.timeout(TITLE_TIMEOUT_MS) },
+      );
       const title = cleanTitle(response.text);
       if (title) return title;
     } catch (error) {
