@@ -1,13 +1,13 @@
 import { initChatSocket } from '../service/chat.socket.js';
 import {
   getAllChats,
-  getSingleChat,
   sendMessage,
   deleteChat,
   getMessages,
   renameChat,
 } from '../service/chat.api.js';
 import { useDispatch } from 'react-redux';
+import { setUser } from '../../auth/auth.slice.js';
 import {
   setChats,
   setCurrentChatId,
@@ -22,6 +22,12 @@ import {
 
 const useChat = () => {
   const dispatch = useDispatch();
+
+  // An expired session makes every request fail with 401; send the user back
+  // to the login page instead of showing a broken dashboard
+  const handleAuthError = (error) => {
+    if (error.response?.status === 401) dispatch(setUser(null));
+  };
 
   const handleSendMessage = async (messageData) => {
     try {
@@ -58,6 +64,7 @@ const useChat = () => {
       );
       return true;
     } catch (error) {
+      handleAuthError(error);
       // Prefer the server's message (e.g. AI provider failure) over axios's generic one
       dispatch(setChatsError(error.response?.data?.message || error.message));
       return false;
@@ -86,7 +93,8 @@ const useChat = () => {
         ),
       );
     } catch (error) {
-      dispatch(setChatsError(error.message));
+      handleAuthError(error);
+      dispatch(setChatsError(error.response?.data?.message || error.message));
     } finally {
       dispatch(setChatsIsLoading(false));
     }
@@ -110,6 +118,7 @@ const useChat = () => {
       );
       dispatch(setCurrentChatId(chatId));
     } catch (error) {
+      handleAuthError(error);
       console.error('Error fetching chat messages:', error);
     }
   };

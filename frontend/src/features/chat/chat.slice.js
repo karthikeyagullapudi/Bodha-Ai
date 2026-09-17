@@ -1,13 +1,15 @@
 import { createSlice } from '@reduxjs/toolkit';
 
+const initialState = {
+  chats: {},
+  currentChatId: null,
+  isLoading: false,
+  error: null,
+};
+
 export const chatSlice = createSlice({
   name: 'chat',
-  initialState: {
-    chats: {},
-    currentChatId: null,
-    isLoading: false,
-    error: null,
-  },
+  initialState,
   reducers: {
     createNewChat: (state, action) => {
       const { chatId, title } = action.payload;
@@ -23,6 +25,7 @@ export const chatSlice = createSlice({
     addNewMessage: (state, action) => {
       const { chatId, content, role } = action.payload;
       state.chats[chatId].messages.push({ content, role });
+      state.chats[chatId].lastUpdatedAt = new Date().toISOString();
     },
     addMessages: (state, action) => {
       const { chatId, messages } = action.payload;
@@ -56,6 +59,8 @@ export const chatSlice = createSlice({
         state.chats[chatId].title = title;
       }
     },
+    // Clears everything on logout so the next account starts fresh
+    resetChats: () => initialState,
   },
 });
 
@@ -69,5 +74,6 @@ export const {
   addMessages,
   removeChat,
   updateChatTitle,
+  resetChats,
 } = chatSlice.actions;
 export default chatSlice.reducer;

@@ -1,18 +1,32 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hook/useAuth';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
+import { setError } from '../auth.slice';
+import { ResendVerification } from '../services/auth.api';
 import { Navigate } from 'react-router-dom';
 
 const Login = () => {
+  const location = useLocation();
+  // Set by the register page after a successful sign-up
+  const registeredEmail = location.state?.registeredEmail;
+
   const [formData, setFormData] = useState({
-    email: '',
+    email: registeredEmail || '',
     password: '',
   });
+  const [resendNotice, setResendNotice] = useState(null);
+  const [resending, setResending] = useState(false);
 
   const navigate = useNavigate();
   const { handleLogin } = useAuth();
+  const dispatch = useDispatch();
   const { loading, error } = useSelector((state) => state.auth);
+
+  // Don't carry an error over from another page
+  useEffect(() => {
+    dispatch(setError(null));
+  }, [dispatch]);
 
   const { user } = useSelector((state) => state.auth);
   if (!loading && user) {
@@ -29,11 +43,31 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setResendNotice(null);
     try {
       await handleLogin(formData);
       navigate('/');
     } catch (err) {
       console.error('Login error:', err);
+    }
+  };
+
+  // For accounts whose verification email expired or never arrived
+  const handleResend = async () => {
+    setResending(true);
+    try {
+      const data = await ResendVerification(formData.email);
+      setResendNotice({ ok: true, text: data.message });
+    } catch (err) {
+      setResendNotice({
+        ok: false,
+        text:
+          err.response?.data?.errors?.[0]?.msg ||
+          err.response?.data?.message ||
+          err.message,
+      });
+    } finally {
+      setResending(false);
     }
   };
 
@@ -57,9 +91,36 @@ const Login = () => {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {registeredEmail && !error && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/40 rounded-xl text-emerald-400 text-sm text-center">
+                Account created! We sent a verification link to{' '}
+                {registeredEmail}. Verify your email, then sign in.
+              </div>
+            )}
             {error && (
               <div className="p-3 bg-red-500/10 border border-red-500/50 rounded-xl text-red-500 text-sm text-center">
                 {error}
+                {/verify your email/i.test(error) && !resendNotice?.ok && (
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    disabled={resending}
+                    className="block mx-auto mt-2 font-semibold text-violet-400 hover:text-violet-300 underline disabled:opacity-60"
+                  >
+                    {resending ? 'Sending...' : 'Resend verification email'}
+                  </button>
+                )}
+              </div>
+            )}
+            {resendNotice && (
+              <div
+                className={`p-3 rounded-xl text-sm text-center border ${
+                  resendNotice.ok
+                    ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400'
+                    : 'bg-red-500/10 border-red-500/50 text-red-500'
+                }`}
+              >
+                {resendNotice.text}
               </div>
             )}
             <div className="space-y-2">

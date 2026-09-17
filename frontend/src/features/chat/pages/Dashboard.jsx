@@ -8,6 +8,9 @@ import { setCurrentChatId, setChatsError } from '../chat.slice';
 import CodeBlock from '../components/CodeBlock';
 import PromptSuggestions from '../components/PromptSuggestions';
 
+// Shared so an empty chat doesn't produce a new array (and a scroll) every render
+const NO_MESSAGES = [];
+
 const Dashboard = () => {
   const chat = useChat();
   const { handleLogout } = useAuth();
@@ -19,8 +22,11 @@ const Dashboard = () => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [copiedMsgIdx, setCopiedMsgIdx] = useState(null);
+  // The question being answered, shown before the server replies
+  const [pendingMessage, setPendingMessage] = useState(null);
 
   const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
   const { user } = useSelector((state) => state.auth);
   const { chats, currentChatId, isLoading, error } = useSelector(
     (state) => state.chat,
@@ -30,7 +36,8 @@ const Dashboard = () => {
     chat.handleGetChats();
   }, []);
 
-  const currentMessages = currentChatId ? chats[currentChatId]?.messages || [] : [];
+  const currentMessages =
+    (currentChatId && chats[currentChatId]?.messages) || NO_MESSAGES;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -39,6 +46,14 @@ const Dashboard = () => {
   useEffect(() => {
     scrollToBottom();
   }, [currentMessages, isLoading]);
+
+  // Grow the input with its text, and shrink it back once the text is sent
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [message]);
 
   const openChat = (chatId) => {
     chat.handleOpenChat(chatId);
@@ -55,10 +70,12 @@ const Dashboard = () => {
     const query = textToSend || message;
     if (query.trim() && !isLoading) {
       setMessage('');
+      setPendingMessage(query);
       const sent = await chat.handleSendMessage({
         message: query,
         chatId: currentChatId,
       });
+      setPendingMessage(null);
       // Put the text back so the user can retry without retyping
       if (!sent) setMessage(query);
     }
@@ -198,7 +215,9 @@ const Dashboard = () => {
               No previous chats yet. Start a new conversation!
             </div>
           ) : (
-            Object.values(chats).map((chatItem) => {
+            Object.values(chats)
+              .sort((a, b) => new Date(b.lastUpdatedAt) - new Date(a.lastUpdatedAt))
+              .map((chatItem) => {
               const isActive = currentChatId === chatItem.id;
               const isEditing = editingChatId === chatItem.id;
 
@@ -251,7 +270,7 @@ const Dashboard = () => {
 
                   {/* Actions (Rename & Delete) */}
                   {!isEditing && (
-                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity shrink-0">
+                    <div className="md:opacity-0 md:group-hover:opacity-100 flex items-center gap-1 transition-opacity shrink-0">
                       <button
                         onClick={(e) => startRenaming(e, chatItem.id, chatItem.title)}
                         className="p-1 text-zinc-400 hover:text-violet-300 hover:bg-white/10 rounded transition-colors"
@@ -305,7 +324,7 @@ const Dashboard = () => {
           {showProfileMenu && (
             <div className="absolute bottom-16 left-3 right-3 bg-zinc-900/95 border border-white/15 rounded-2xl p-2 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
               <div className="px-3 py-2 border-b border-white/10 mb-1">
-                <p className="text-xs font-semibold text-white">{user?.name || 'User Profile'}</p>
+                <p className="text-xs font-semibold text-white">{user?.username || 'User Profile'}</p>
                 <p className="text-[11px] text-zinc-400 truncate">{user?.email || 'user@example.com'}</p>
               </div>
               <div className="px-3 py-2 text-[11px] text-violet-400 font-medium flex items-center justify-between">
@@ -342,11 +361,11 @@ const Dashboard = () => {
             className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/5 cursor-pointer transition-colors border border-transparent hover:border-white/5"
           >
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-500 via-fuchsia-600 to-amber-500 flex items-center justify-center shrink-0 shadow-lg shadow-violet-500/20 font-bold text-sm text-white">
-              {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+              {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-xs font-semibold truncate text-zinc-200">
-                {user?.name || 'User Name'}
+                {user?.username || 'User Name'}
               </h3>
               <p className="text-[11px] text-zinc-500 truncate">
                 {user?.email || 'user@example.com'}
@@ -413,9 +432,9 @@ const Dashboard = () => {
         </div>
 
         {/* Message Thread or Starter Suggestions */}
-        {!currentChatId || currentMessages.length === 0 ? (
+        {currentMessages.length === 0 && !pendingMessage ? (
           <PromptSuggestions
-            userName={user?.name}
+            userName={user?.username}
             onSelectPrompt={(promptText) => handleSend(promptText)}
           />
         ) : (
@@ -479,12 +498,18 @@ const Dashboard = () => {
                             li: ({ children }) => (
                               <li className="text-[15px] leading-relaxed">{children}</li>
                             ),
-                            code: ({ inline, className, children }) => {
+                            // CodeBlock renders its own <pre>
+                            pre: ({ children }) => <>{children}</>,
+                            code: ({ className, children }) => {
+                              const text = String(children);
                               const match = /language-(\w+)/.exec(className || '');
-                              return !inline ? (
+                              // react-markdown no longer passes `inline`; fenced
+                              // blocks have a language class or end in a newline
+                              const isBlock = match || text.endsWith('\n');
+                              return isBlock ? (
                                 <CodeBlock
                                   language={match ? match[1] : ''}
-                                  code={String(children).replace(/\n$/, '')}
+                                  code={text.replace(/\n$/, '')}
                                 />
                               ) : (
                                 <code className="bg-zinc-800 text-violet-300 px-1.5 py-0.5 rounded text-[13px] font-mono border border-white/5">
@@ -552,6 +577,14 @@ const Dashboard = () => {
               </div>
             ))}
 
+            {pendingMessage && (
+              <div className="flex justify-end">
+                <div className="max-w-[90%] md:max-w-[78%] rounded-2xl rounded-tr-xs px-5 py-4 shadow-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-violet-600/10">
+                  <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{pendingMessage}</p>
+                </div>
+              </div>
+            )}
+
             {/* AI Typing / Thinking Animation */}
             {isLoading && (
               <div className="flex items-start gap-3 justify-start">
@@ -583,7 +616,7 @@ const Dashboard = () => {
         <div className="p-4 md:p-6 pt-2 z-20">
           {error && (
             <div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-              <span>Couldn't get a response: {error}</span>
+              <span>{error}</span>
               <button
                 onClick={() => dispatch(setChatsError(null))}
                 className="shrink-0 text-red-300/70 hover:text-red-200"
@@ -595,12 +628,9 @@ const Dashboard = () => {
           )}
           <div className="relative flex items-end gap-2 bg-zinc-900/80 backdrop-blur-2xl border border-white/15 rounded-[2rem] p-2.5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] transition-all focus-within:border-violet-500/60 focus-within:shadow-[0_0_25px_-3px_rgba(139,92,246,0.3)]">
             <textarea
+              ref={textareaRef}
               value={message}
-              onChange={(e) => {
-                setMessage(e.target.value);
-                e.target.style.height = 'auto';
-                e.target.style.height = `${e.target.scrollHeight}px`;
-              }}
+              onChange={(e) => setMessage(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();

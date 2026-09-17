@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hook/useAuth';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
+import { setError } from '../auth.slice';
 import { Navigate } from 'react-router-dom';
 
 const Register = () => {
@@ -13,7 +14,13 @@ const Register = () => {
 
   const navigate = useNavigate();
   const { handleRegister } = useAuth();
+  const dispatch = useDispatch();
   const { loading, error } = useSelector((state) => state.auth);
+
+  // Don't carry an error over from another page
+  useEffect(() => {
+    dispatch(setError(null));
+  }, [dispatch]);
 
   const { user } = useSelector((state) => state.auth);
   if (!loading && user) {
@@ -32,7 +39,7 @@ const Register = () => {
     e.preventDefault();
     try {
       await handleRegister(formData);
-      navigate('/login');
+      navigate('/login', { state: { registeredEmail: formData.email } });
     } catch (err) {
       console.error('Registration error:', err);
     }
