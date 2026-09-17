@@ -25,6 +25,14 @@ const userSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    // Never send the password hash to the client, even when a handler
+    // responds with the whole user document
+    toJSON: {
+      transform: (doc, ret) => {
+        delete ret.password;
+        return ret;
+      },
+    },
   },
 );
 

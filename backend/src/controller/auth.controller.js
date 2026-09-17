@@ -7,6 +7,37 @@ import {
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 
+// The login token and its cookie expire together
+const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+const authCookieOptions = {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'strict',
+};
+
+// Resolves to true when the email was sent
+const sendVerificationEmail = async (req, user) => {
+  const emailVerificationToken = jwt.sign(
+    {
+      email: user.email,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: '1h' },
+  );
+
+  // APP_URL wins when set; otherwise link back to the site the request came from
+  const appUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+  const verificationUrl = `${appUrl}/api/auth/verify-email?token=${emailVerificationToken}`;
+
+  return sendMail(
+    user.email,
+    `Welcome to Bodha AI, ${user.username}`,
+    welcomeEmailTemplate(user.username, verificationUrl),
+    `Welcome to Bodha AI! Verify your email to get started: ${verificationUrl}`,
+  );
+};
+
 const verifyEmail = async (req, res) => {
   const token = req.query.token;
 
@@ -41,8 +72,6 @@ const verifyEmail = async (req, res) => {
     user.verified = true;
     await user.save();
 
-    // In a real app, you might want to redirect to frontend here with res.redirect(process.env.CLIENT_URL)
-
     const htmlResponse = emailVerifiedTemplate();
 
     res.status(200).send(htmlResponse);
@@ -64,8 +93,9 @@ const registerUser = async (req, res) => {
     });
 
     if (userExist) {
+      // Don't echo the existing account's details back
       return res.status(400).json({
-        message: `${userExist.username} or ${userExist.email} already exists`,
+        message: 'An account with this username or email already exists',
         success: false,
         error: 'User already exists',
       });
@@ -79,20 +109,7 @@ const registerUser = async (req, res) => {
 
     const createdUser = await userModel.findById(user._id).select('-password');
 
-    const emailVerificationToken = jwt.sign(
-      {
-        email,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '1h' },
-    );
-
-    await sendMail(
-      email,
-      `Welcome to Bodha AI, ${username}`,
-      welcomeEmailTemplate(username, emailVerificationToken),
-      `Welcome to Bodha AI! We're absolutely thrilled to have you join our community. Your account has been successfully created!`,
-    );
+    await sendVerificationEmail(req, createdUser);
 
     res.status(201).json({
       message: 'User registered successfully',
@@ -100,9 +117,10 @@ const registerUser = async (req, res) => {
       data: createdUser,
     });
   } catch (error) {
+    console.error('Error in registerUser controller:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Internal Server Error',
+      message: 'Registration failed. Please try again.',
     });
   }
 };
@@ -113,9 +131,14 @@ const loginUser = async (req, res) => {
 
     const user = await userModel.findOne({ email });
 
-    if (!user) {
+    // Same answer for unknown email and wrong password, so the form can't be
+    // used to find out who has an account
+    const isPasswordValid =
+      user && (await bcrypt.compare(password, user.password));
+
+    if (!isPasswordValid) {
       return res.status(400).json({
-        message: 'Try after registering',
+        message: 'Invalid email or password',
         success: false,
         error: 'Invalid credentials',
       });
@@ -129,29 +152,17 @@ const loginUser = async (req, res) => {
       });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-
-    if (!isPasswordValid) {
-      return res.status(400).json({
-        message: 'password is incorrect',
-        success: false,
-        error: 'Invalid credentials',
-      });
-    }
-
     const token = jwt.sign(
       {
         id: user._id.toString(),
       },
       process.env.JWT_SECRET,
-      { expiresIn: '1h' },
+      { expiresIn: SESSION_MAX_AGE_MS / 1000 },
     );
 
     res.cookie('token', token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000,
+      ...authCookieOptions,
+      maxAge: SESSION_MAX_AGE_MS,
     });
 
     res.status(200).json({
@@ -160,16 +171,43 @@ const loginUser = async (req, res) => {
       data: user,
     });
   } catch (error) {
+    console.error('Error in loginUser controller:', error);
     res.status(500).json({
-      message: error.message || 'Internal Server Error',
+      message: 'Login failed. Please try again.',
       success: false,
-      error: error.message,
+      error: 'Internal Server Error',
+    });
+  }
+};
+
+const resendVerification = async (req, res) => {
+  try {
+    const user = await userModel.findOne({ email: req.body.email });
+
+    if (user && !user.verified && !(await sendVerificationEmail(req, user))) {
+      return res.status(503).json({
+        message: "We couldn't send the email right now. Please try again later.",
+        success: false,
+      });
+    }
+
+    // Same reply either way, so this can't be used to look up accounts
+    res.status(200).json({
+      message:
+        'If this account still needs verifying, a new link is on its way. It expires in 1 hour.',
+      success: true,
+    });
+  } catch (error) {
+    console.error('Error in resendVerification controller:', error);
+    res.status(500).json({
+      message: 'Could not send the email. Please try again.',
+      success: false,
     });
   }
 };
 
 const logoutUser = (req, res) => {
-  res.clearCookie('token');
+  res.clearCookie('token', authCookieOptions);
   res.status(200).json({
     message: 'User logged out successfully',
     success: true,
@@ -192,4 +230,11 @@ const getMe = (req, res) => {
   }
 };
 
-export { registerUser, loginUser, logoutUser, verifyEmail, getMe };
+export {
+  registerUser,
+  loginUser,
+  logoutUser,
+  verifyEmail,
+  resendVerification,
+  getMe,
+};

@@ -7,10 +7,11 @@ import {
   renameChat,
 } from '../controller/chat.controller.js';
 import { identifyUser } from '../middleware/auth.middleware.js';
+import { messageLimiter } from '../middleware/rateLimit.middleware.js';
 
 const chatRouter = Router();
 
-chatRouter.post('/message', identifyUser, sendMessage);
+chatRouter.post('/message', identifyUser, messageLimiter, sendMessage);
 chatRouter.get('/chats', identifyUser, getAllChats);
 chatRouter.get('/chat/:chatId', identifyUser, getMessages);
 chatRouter.delete('/delete-chat/:chatId', identifyUser, deleteChat);

@@ -1,48 +1,87 @@
+import mongoose from 'mongoose';
 import { generateResponse, generateTitle } from '../services/ai.service.js';
 import chatModel from '../model/chat.model.js';
 import messageModel from '../model/message.model.js';
 
+// Loads a chat and checks it belongs to the user. Sends the error response
+// itself and returns null when the chat can't be used.
+const findOwnChat = async (chatId, user, res) => {
+  const chat = mongoose.isValidObjectId(chatId)
+    ? await chatModel.findById(chatId)
+    : null;
+
+  if (!chat) {
+    res.status(404).json({
+      success: false,
+      message: 'Chat not found',
+    });
+    return null;
+  }
+
+  if (chat.user.toString() !== user._id.toString()) {
+    res.status(403).json({
+      success: false,
+      message: 'Unauthorized to access this chat',
+    });
+    return null;
+  }
+
+  return chat;
+};
+
+const sendServerError = (res, error, fallbackMessage) => {
+  console.error(error);
+  // Only errors raised on purpose (with a status) carry a user-facing message
+  res.status(error.status || 500).json({
+    success: false,
+    message: error.status ? error.message : fallbackMessage,
+  });
+};
+
 export const sendMessage = async (req, res) => {
   try {
-    const { message, chat: chatId } = req.body;
+    const { chat: chatId } = req.body;
+    const message =
+      typeof req.body.message === 'string' ? req.body.message.trim() : '';
 
-    let chat = null;
-    let title = null;
-
-    if (!chatId) {
-      title = await generateTitle(message);
-      chat = await chatModel.create({
-        user: req.user._id,
-        title: title,
+    if (!message) {
+      return res.status(400).json({
+        success: false,
+        message: 'Message is required',
       });
-    } else {
-      chat = await chatModel.findById(chatId);
-      if (!chat) {
-        return res.status(404).json({
-          success: false,
-          message: 'Chat not found',
-        });
-      }
-      title = chat.title;
     }
 
-    const targetChatId = chatId || chat._id;
+    let chat = null;
+    let history = [];
 
-    const userMessage = await messageModel.create({
-      chat: targetChatId,
-      content: message,
-      role: 'user',
-    });
+    if (chatId) {
+      chat = await findOwnChat(chatId, req.user, res);
+      if (!chat) return;
+      history = await messageModel.find({ chat: chat._id }).sort({ _id: 1 });
+    }
 
-    const messages = await messageModel.find({ chat: targetChatId });
+    // Get the AI reply before saving anything, so a failed request doesn't
+    // leave an empty chat or an unanswered message behind
+    const [content, title] = await Promise.all([
+      generateResponse([...history, { role: 'user', content: message }]),
+      chat ? chat.title : generateTitle(message),
+    ]);
 
-    const result = await generateResponse(messages);
+    if (chat) {
+      // Bump updatedAt so the chat moves to the top of the list
+      chat.updatedAt = new Date();
+      await chat.save();
+    } else {
+      chat = await chatModel.create({
+        user: req.user._id,
+        title,
+      });
+    }
 
-    const aiMessage = await messageModel.create({
-      chat: targetChatId,
-      content: result,
-      role: 'ai',
-    });
+    const [userMessage, aiMessage] = await messageModel.insertMany([
+      { chat: chat._id, content: message, role: 'user' },
+      { chat: chat._id, content, role: 'ai' },
+    ]);
 
     res.status(200).json({
       success: true,
@@ -53,120 +92,86 @@ export const sendMessage = async (req, res) => {
       aiMessage,
     });
   } catch (error) {
-    console.error('Error in sendMessage controller:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to generate response',
-    });
+    sendServerError(res, error, 'Failed to generate response');
   }
 };
 
 export const getAllChats = async (req, res) => {
-  const user = req.user;
+  try {
+    const chats = await chatModel
+      .find({ user: req.user._id })
+      .sort({ updatedAt: -1 });
 
-  const chats = await chatModel.find({ user: user._id });
-
-  res.status(200).json({
-    success: true,
-    message: 'Chats received successfully',
-    chats: chats,
-  });
+    res.status(200).json({
+      success: true,
+      message: 'Chats received successfully',
+      chats: chats,
+    });
+  } catch (error) {
+    sendServerError(res, error, 'Failed to load chats');
+  }
 };
 
 export const getMessages = async (req, res) => {
-  const chatId = req.params.chatId;
-  const chat = await chatModel.findById(chatId);
+  try {
+    const chat = await findOwnChat(req.params.chatId, req.user, res);
+    if (!chat) return;
 
-  if (!chat) {
-    return res.status(404).json({
-      success: false,
-      message: 'Chat not found',
+    const messages = await messageModel
+      .find({ chat: chat._id })
+      .sort({ _id: 1 });
+
+    res.status(200).json({
+      success: true,
+      message: 'Messages received successfully',
+      messages: messages,
     });
+  } catch (error) {
+    sendServerError(res, error, 'Failed to load messages');
   }
-
-  const user = req.user;
-
-  if (chat.user.toString() !== user._id.toString()) {
-    return res.status(403).json({
-      success: false,
-      message: 'Unauthorized to access this chat',
-    });
-  }
-
-  const messages = await messageModel.find({ chat: chatId });
-
-  res.status(200).json({
-    success: true,
-    message: 'Messages received successfully',
-    messages: messages,
-  });
 };
 
 export const deleteChat = async (req, res) => {
-  const chatId = req.params.chatId;
-  const chat = await chatModel.findById(chatId);
+  try {
+    const chat = await findOwnChat(req.params.chatId, req.user, res);
+    if (!chat) return;
 
-  if (!chat) {
-    return res.status(404).json({
-      success: false,
-      message: 'Chat not found',
+    await chatModel.findByIdAndDelete(chat._id);
+    await messageModel.deleteMany({ chat: chat._id });
+
+    res.status(200).json({
+      success: true,
+      message: 'Chat deleted successfully',
     });
+  } catch (error) {
+    sendServerError(res, error, 'Failed to delete chat');
   }
-
-  const user = req.user;
-
-  if (chat.user.toString() !== user._id.toString()) {
-    return res.status(403).json({
-      success: false,
-      message: 'Unauthorized to access this chat',
-    });
-  }
-
-  await chatModel.findByIdAndDelete(chatId);
-  await messageModel.deleteMany({ chat: chatId });
-
-  res.status(200).json({
-    success: true,
-    message: 'Chat deleted successfully',
-  });
 };
 
 export const renameChat = async (req, res) => {
-  const chatId = req.params.chatId;
-  const { title } = req.body;
+  try {
+    const title =
+      typeof req.body.title === 'string' ? req.body.title.trim() : '';
 
-  if (!title || !title.trim()) {
-    return res.status(400).json({
-      success: false,
-      message: 'Title is required',
+    if (!title) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title is required',
+      });
+    }
+
+    const chat = await findOwnChat(req.params.chatId, req.user, res);
+    if (!chat) return;
+
+    chat.title = title.slice(0, 100);
+    await chat.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Chat title updated successfully',
+      chat,
     });
+  } catch (error) {
+    sendServerError(res, error, 'Failed to rename chat');
   }
-
-  const chat = await chatModel.findById(chatId);
-
-  if (!chat) {
-    return res.status(404).json({
-      success: false,
-      message: 'Chat not found',
-    });
-  }
-
-  const user = req.user;
-
-  if (chat.user.toString() !== user._id.toString()) {
-    return res.status(403).json({
-      success: false,
-      message: 'Unauthorized to update this chat',
-    });
-  }
-
-  chat.title = title.trim();
-  await chat.save();
-
-  res.status(200).json({
-    success: true,
-    message: 'Chat title updated successfully',
-    chat,
-  });
 };
-

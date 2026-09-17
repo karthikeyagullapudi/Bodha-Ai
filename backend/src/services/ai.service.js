@@ -10,22 +10,21 @@ import { createAgent } from 'langchain';
 import { z } from 'zod';
 import { searchInternet } from './internet.service.js';
 
-const systemPromptText =
-  'You are Bodha AI, an advanced, highly intelligent AI assistant equipped with real-time web search capabilities. ALWAYS use the searchInternet tool whenever asked about current events, recent developments, real-time facts, stock prices, weather, sports results, or up-to-date topics. Provide comprehensive, accurate, structured, and beautifully formatted markdown responses.';
+// The Gemini free tier limits requests per minute *per model*, so trying
+// several models in turn keeps the app answering when one is rate limited.
+// Mistral is the last resort. Override the order with GEMINI_MODELS
+// (comma-separated model names).
+const GEMINI_MODELS = (
+  process.env.GEMINI_MODELS ||
+  process.env.GEMINI_MODEL ||
+  'gemini-3.6-flash,gemini-2.5-flash,gemini-flash-lite-latest'
+)
+  .split(',')
+  .map((name) => name.trim())
+  .filter(Boolean);
 
-// Keep retries low so a failing provider falls through quickly instead of
-// leaving the user waiting for minutes while LangChain backs off
-const primaryModel = new ChatGoogleGenerativeAI({
-  model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
-  apiKey: process.env.GEMINI_API_KEY,
-  maxRetries: 1,
-});
-
-const mistralModel = new ChatMistralAI({
-  model: 'mistral-small-latest',
-  apiKey: process.env.MISTRAL_API_KEY,
-  maxRetries: 1,
-});
+// Titles use small, fast models so they don't eat into the answer models' quota
+const TITLE_MODELS = ['gemini-3.1-flash-lite', 'gemini-flash-lite-latest'];
 
 const searchInternetTool = tool(searchInternet, {
   name: 'searchInternet',
@@ -36,17 +35,37 @@ const searchInternetTool = tool(searchInternet, {
   }),
 });
 
-const primaryAgent = createAgent({
-  model: primaryModel,
-  tools: [searchInternetTool],
-  prompt: systemPromptText,
-});
+// maxRetries: 0 so a rate-limited or unavailable model hands over to the next
+// one immediately instead of backing off while the user waits
+const createGeminiModel = (model) =>
+  new ChatGoogleGenerativeAI({
+    model,
+    apiKey: process.env.GEMINI_API_KEY,
+    maxRetries: 0,
+  });
 
-const fallbackAgent = createAgent({
-  model: mistralModel,
-  tools: [searchInternetTool],
-  prompt: systemPromptText,
-});
+const agents = [
+  ...GEMINI_MODELS.map((name) => ({
+    name,
+    agent: createAgent({
+      model: createGeminiModel(name),
+      tools: [searchInternetTool],
+    }),
+  })),
+  {
+    name: 'mistral-small-latest',
+    agent: createAgent({
+      model: new ChatMistralAI({
+        model: 'mistral-small-latest',
+        apiKey: process.env.MISTRAL_API_KEY,
+        maxRetries: 0,
+      }),
+      tools: [searchInternetTool],
+    }),
+  },
+];
+
+const titleModels = TITLE_MODELS.map(createGeminiModel);
 
 export const generateResponse = async (messages) => {
   const currentDate = new Date().toLocaleDateString('en-US', {
@@ -57,7 +76,7 @@ export const generateResponse = async (messages) => {
   });
 
   const systemMessage = new SystemMessage(
-    `Today's date is ${currentDate}. You are Bodha AI, an advanced AI assistant equipped with real-time web search capabilities. ALWAYS use the searchInternet tool whenever user queries involve current events, recent developments, sports results, scores, winners, weather, stock prices, news, or topics that benefit from live web search information.`,
+    `Today's date is ${currentDate}. You are Bodha AI, an advanced, highly intelligent AI assistant equipped with real-time web search capabilities. ALWAYS use the searchInternet tool whenever user queries involve current events, recent developments, sports results, scores, winners, weather, stock prices, news, or topics that benefit from live web search information. Provide comprehensive, accurate, structured, and beautifully formatted markdown responses.`,
   );
 
   const formattedMessages = [
@@ -69,41 +88,61 @@ export const generateResponse = async (messages) => {
     ),
   ];
 
-  try {
-    const response = await primaryAgent.invoke({
-      messages: formattedMessages,
-    });
-    return response.messages[response.messages.length - 1].content;
-  } catch (error) {
-    console.warn('Primary agent failed, falling back to Mistral agent:', error.message);
+  for (const { name, agent } of agents) {
     try {
-      const response = await fallbackAgent.invoke({
-        messages: formattedMessages,
-      });
-      return response.messages[response.messages.length - 1].content;
-    } catch (fallbackError) {
-      console.error('All AI agents failed:', fallbackError.message);
-      throw new Error(`AI service temporary failure: ${fallbackError.message}`);
+      const response = await agent.invoke({ messages: formattedMessages });
+      const text = response.messages.at(-1)?.text?.trim();
+      if (text) return text;
+      console.warn(`AI model ${name} returned an empty reply, trying the next model`);
+    } catch (error) {
+      console.warn(
+        `AI model ${name} failed, trying the next model:`,
+        error.message.slice(0, 300),
+      );
     }
   }
+
+  const error = new Error(
+    'Bodha AI is busy right now. Please try again in a minute.',
+  );
+  error.status = 503;
+  throw error;
 };
 
-export const generateTitle = async (message) => {
-  try {
-    const response = await primaryModel.invoke([
-      new SystemMessage(
-        `you are a helpful assistant that generates, concise and descriptive titles for the chat conversations.
+// Models sometimes wrap titles in quotes or markdown, or add a "Title:" prefix
+const cleanTitle = (text) =>
+  text
+    .trim()
+    .split('\n')[0]
+    .replace(/^title\s*:\s*/i, '')
+    .replace(/[*_#`"“”]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[.:;,!]+$/, '')
+    .slice(0, 60);
 
-        User will provide you with the first message of a chat conversation, and you will generate a title that captures the essence of the conversation in 2 to 4 words that title should be clear, relevant and engaging giving user a quick understanding of the chat topic.`,
-      ),
-      new HumanMessage(
-        `This is the first message of a chat conversation: ${message}`,
-      ),
-    ]);
-    return response.text;
-  } catch (error) {
-    console.warn('generateTitle failed, using fallback title:', error.message);
-    const words = message.trim().split(/\s+/).slice(0, 4).join(' ');
-    return words || 'New Chat';
+export const generateTitle = async (message) => {
+  for (const titleModel of titleModels) {
+    try {
+      const response = await titleModel.invoke([
+        new SystemMessage(
+          `you are a helpful assistant that generates, concise and descriptive titles for the chat conversations.
+
+          User will provide you with the first message of a chat conversation, and you will generate a title that captures the essence of the conversation in 2 to 4 words that title should be clear, relevant and engaging giving user a quick understanding of the chat topic. Reply with the title only, without quotes or formatting.`,
+        ),
+        new HumanMessage(
+          `This is the first message of a chat conversation: ${message}`,
+        ),
+      ]);
+      const title = cleanTitle(response.text);
+      if (title) return title;
+    } catch (error) {
+      console.warn(
+        `Title model ${titleModel.model} failed:`,
+        error.message.slice(0, 200),
+      );
+    }
   }
+  // Every title model failed: fall back to the first few words of the message
+  return cleanTitle(message.split(/\s+/).slice(0, 4).join(' ')) || 'New Chat';
 };

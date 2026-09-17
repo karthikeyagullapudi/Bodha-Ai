@@ -38,6 +38,16 @@ export const registerValidator = [
   validate,
 ];
 
+export const resendVerificationValidator = [
+  body('email')
+    .trim()
+    .notEmpty()
+    .withMessage('Email is required')
+    .isEmail()
+    .withMessage('Must be a valid email address'),
+  validate,
+];
+
 export const loginValidator = [
   body('email')
     .trim()

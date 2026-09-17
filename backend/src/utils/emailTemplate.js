@@ -1,4 +1,13 @@
-export const welcomeEmailTemplate = (username, verificationToken) => {
+// Usernames are user input, so escape them before putting them in email HTML
+const escapeHtml = (value) =>
+  String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+export const welcomeEmailTemplate = (username, verificationUrl) => {
   return `
 <!DOCTYPE html>
 <html>
@@ -97,12 +106,12 @@ export const welcomeEmailTemplate = (username, verificationToken) => {
         <h1>Bodha AI</h1>
       </div>
       <div class="content">
-        <h2 class="greeting">Hello ${username},</h2>
+        <h2 class="greeting">Hello ${escapeHtml(username)},</h2>
         <p class="message">
           Welcome to Bodha AI! We're absolutely thrilled to have you join our community. Your account has successfully been created. Please verify your email address to get started.
         </p>
         <div class="cta-container">
-          <a href="${process.env.APP_URL || 'http://localhost:5173'}/api/auth/verify-email?token=${verificationToken}" class="cta-button">Verify Email</a>
+          <a href="${escapeHtml(verificationUrl)}" class="cta-button">Verify Email</a>
         </div>
         <p class="message">
           If you have any questions, need help getting started, or just want to say hi, feel free to reply to this email. Our support team is always here for you.
