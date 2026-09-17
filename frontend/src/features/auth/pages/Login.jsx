@@ -221,6 +221,12 @@ const Login = () => {
                 Create one now
               </Link>
             </p>
+            <a
+              href="/privacy.html"
+              className="inline-block mt-4 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              Privacy Policy
+            </a>
           </div>
         </div>
       </div>
